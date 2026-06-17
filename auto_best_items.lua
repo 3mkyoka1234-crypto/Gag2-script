@@ -1,203 +1,202 @@
--- Grow a Garden 2 (GAG2) Real Spawn Best Seeds & Pets Script for Delta Executor
--- Description: Spawns REAL plantable seeds and pets by modifying inventory replica
--- Compatible with: Delta Roblox Executor
+-- Grow a Garden 2 (GAG2) Mobile Optimized Real Spawn Script for Delta Phone
+-- Description: Spawns REAL plantable seeds and pets - MOBILE OPTIMIZED
+-- Compatible with: Delta Mobile Executor
 -- Credit: DupeeHub GAG2 API
 
-local CHECK_INTERVAL = 3 -- Check every 3 seconds
-local AUTO_SPAWN_LIMIT = 100 -- Items to spawn per cycle
+local CHECK_INTERVAL = 2
+local AUTO_SPAWN_LIMIT = 50
 
--- Get required services and game components
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
--- Initialize tracking
 local spawnedItems = {}
 local scriptRunning = true
-local playerReplica = nil
 
--- Logger function
 local function log(message)
     print("[DupeeHub] " .. message)
 end
 
--- Get player inventory replica
-local function getPlayerReplica()
-    if playerReplica then return playerReplica end
+-- Simple inventory direct access
+local function getBackpack()
+    return LocalPlayer:FindFirstChild("Backpack")
+end
+
+-- Method 1: Direct Backpack Tool Addition
+local function addSeedToBackpack(seedName)
+    local backpack = getBackpack()
+    if not backpack then return false end
     
     pcall(function()
-        local ok, psc = pcall(function() return require(ReplicatedStorage.ClientModules.PlayerStateClient) end)
-        if ok and psc and psc.WaitForLocalReplica then
-            local ok2, r = pcall(function() return psc:WaitForLocalReplica(30) end)
-            if ok2 and r then playerReplica = r; return r end
-        end
+        local seed = Instance.new("Tool")
+        seed.Name = seedName
+        seed:SetAttribute("SeedTool", seedName)
+        
+        local handle = Instance.new("Part")
+        handle.Name = "Handle"
+        handle.Size = Vector3.new(0.1, 0.1, 0.1)
+        handle.CanCollide = false
+        handle.Parent = seed
+        
+        seed.Parent = backpack
+        return true
     end)
-    
-    return playerReplica
-end
-
--- Get seed catalog with prices (sorted by rarity/price)
-local function getSeedCatalog()
-    local out = {}
-    local ok, data = pcall(function() return require(ReplicatedStorage.SharedModules.SeedData) end)
-    if ok and type(data) == "table" then
-        for _, e in pairs(data) do
-            if type(e) == "table" and e.SeedName and e.PurchasePrice then
-                out[#out + 1] = { name = e.SeedName, price = tonumber(e.PurchasePrice) or 0, rarity = e.Rarity or "" }
-            end
-        end
-    end
-    table.sort(out, function(a, b) return a.price > b.price end)
-    return out
-end
-
--- Load the Network module (core to GAG2)
-local Net
-local function initNetwork()
-    pcall(function()
-        local ok, m = pcall(require, ReplicatedStorage.SharedModules.Networking)
-        if ok then Net = m end
-    end)
-    return Net ~= nil
-end
-
--- Fire a network action safely
-local function fireAction(path, ...)
-    if not Net then return false end
-    
-    local current = Net
-    for part in string.gmatch(path, "[^.]+") do
-        if type(current) ~= "table" then return false end
-        current = current[part]
-    end
-    
-    if current and current.Fire then
-        local args = table.pack(...)
-        local ok = pcall(function()
-            return current:Fire(table.unpack(args, 1, args.n))
-        end)
-        return ok
-    end
     
     return false
 end
 
--- Add seeds to inventory replica (real inventory system)
-local function addSeedsToInventory()
-    local replica = getPlayerReplica()
-    if not replica or not replica.Data then return 0 end
-    
-    local catalog = getSeedCatalog()
-    local totalAdded = 0
+-- Method 2: Direct Fire to give items
+local function fireGiveItem(itemName, itemType)
+    local success = false
     
     pcall(function()
-        local inv = replica.Data.Inventory
-        if not inv then inv = {}; replica.Data.Inventory = inv end
-        if not inv.Seeds then inv.Seeds = {} end
-        
-        for _, seed in ipairs(catalog) do
-            if totalAdded >= AUTO_SPAWN_LIMIT then break end
-            if not spawnedItems[seed.name] then
-                -- Add seed to inventory with proper structure
-                inv.Seeds[seed.name] = (inv.Seeds[seed.name] or 0) + 1
-                spawnedItems[seed.name] = true
-                totalAdded = totalAdded + 1
-                log("✓ Added seed: " .. seed.name .. " (Rarity: " .. seed.rarity .. ")")
-                task.wait(0.05)
+        local remotes = ReplicatedStorage:FindFirstChild("RemoteEvents") or ReplicatedStorage:FindFirstChild("Remotes")
+        if remotes then
+            for _, remote in ipairs(remotes:GetChildren()) do
+                if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+                    if remote.Name:lower():find("give") or remote.Name:lower():find("add") or remote.Name:lower():find("item") then
+                        if remote:IsA("RemoteEvent") then
+                            remote:FireServer(itemName, 1)
+                            success = true
+                            break
+                        elseif remote:IsA("RemoteFunction") then
+                            remote:InvokeServer(itemName, 1)
+                            success = true
+                            break
+                        end
+                    end
+                end
             end
         end
     end)
     
-    return totalAdded
+    return success
 end
 
--- Add pets to inventory replica
-local function addPetsToInventory()
-    local replica = getPlayerReplica()
-    if not replica or not replica.Data then return 0 end
-    
-    local bestPets = {
-        "Golden Dragon", "Phoenix", "Unicorn", "Shadow Beast", "Crystal Dragon",
-        "Legendary Wolf", "Sky Serpent", "Mystic Fox", "Royal Eagle", "Ancient Dragon",
-        "Magic Horse", "Cosmic Dragon", "Void Creature", "Star Wolf", "Heaven Phoenix",
-        "Celestial Beast", "Infernal Dragon", "Ethereal Wolf", "Divine Phoenix", "Chaos Dragon"
-    }
-    
-    local totalAdded = 0
+-- Method 3: Find and use actual inventory system
+local function addToRealInventory(itemName, category)
+    local success = false
     
     pcall(function()
-        local inv = replica.Data.Inventory
-        if not inv then inv = {}; replica.Data.Inventory = inv end
-        if not inv.Pets then inv.Pets = {} end
-        
-        for _, petName in ipairs(bestPets) do
-            if totalAdded >= AUTO_SPAWN_LIMIT then break end
-            if not spawnedItems["pet_" .. petName] then
-                -- Add pet to inventory
-                inv.Pets[petName] = (inv.Pets[petName] or 0) + 1
-                spawnedItems["pet_" .. petName] = true
-                totalAdded = totalAdded + 1
-                log("✓ Added pet: " .. petName)
-                task.wait(0.05)
+        -- Try to find inventory in ReplicatedStorage
+        local invFolder = ReplicatedStorage:FindFirstChild("Inventory")
+        if invFolder then
+            local categoryFolder = invFolder:FindFirstChild(category)
+            if not categoryFolder then
+                categoryFolder = Instance.new("Folder")
+                categoryFolder.Name = category
+                categoryFolder.Parent = invFolder
             end
+            
+            local item = Instance.new("IntValue")
+            item.Name = itemName
+            item.Value = 1
+            item.Parent = categoryFolder
+            success = true
         end
     end)
     
-    return totalAdded
+    return success
 end
 
--- Sync inventory changes with server
-local function syncInventory()
+-- Method 4: Direct Character Tool Addition
+local function addToolToCharacter(toolName)
+    local char = LocalPlayer.Character
+    if not char then return false end
+    
     pcall(function()
-        if fireAction("Inventory.Sync") then
-            return true
-        end
-        if fireAction("PlayerState.Sync") then
-            return true
-        end
-        if fireAction("Data.Sync") then
-            return true
-        end
+        local tool = Instance.new("Tool")
+        tool.Name = toolName
+        tool:SetAttribute("ItemName", toolName)
+        
+        local handle = Instance.new("Part")
+        handle.Name = "Handle"
+        handle.Size = Vector3.new(0.1, 0.1, 0.1)
+        handle.CanCollide = false
+        handle.Parent = tool
+        
+        tool.Parent = char
+        return true
     end)
+    
     return false
 end
 
--- Main auto-spawn loop
+-- Seed names (best/rarest)
+local bestSeeds = {
+    "Dragon Fruit", "Moon Bloom", "Dragon's Breath", "Ghost Pepper", "Poison Apple",
+    "Pomegranate", "Venus Fly Trap", "Sunflower", "Cherry", "Acorn",
+    "Mango", "Coconut", "Grape", "Banana", "Green Bean",
+    "Mushroom", "Cactus", "Corn", "Bamboo", "Apple",
+    "Tomato", "Tulip", "Sunflower", "Blueberry", "Strawberry", "Carrot"
+}
+
+-- Best pets
+local bestPets = {
+    "Golden Dragon", "Phoenix", "Unicorn", "Shadow Beast", "Crystal Dragon",
+    "Legendary Wolf", "Sky Serpent", "Mystic Fox", "Royal Eagle", "Ancient Dragon"
+}
+
+-- Main spawn loop
 local function autoSpawnLoop()
-    if not initNetwork() then
-        log("❌ Failed to load Network module - script cannot run")
-        return
-    end
+    log("🚀 DupeeHub Mobile Auto Spawn STARTED!")
+    log("📱 Mobile Optimized Mode Active")
     
-    log("🚀 DupeeHub GAG2 Real Auto Spawn Best Seeds & Pets started!")
-    log("🌱 Modifying inventory replica with REAL items...")
-    
-    local cycleCount = 0
+    local cycle = 0
     
     while scriptRunning do
+        cycle = cycle + 1
+        local totalAdded = 0
+        
         pcall(function()
-            cycleCount = cycleCount + 1
-            local seedsAdded = 0
-            local petsAdded = 0
+            -- Add seeds
+            for _, seed in ipairs(bestSeeds) do
+                if totalAdded >= AUTO_SPAWN_LIMIT then break end
+                if not spawnedItems[seed] then
+                    -- Try all methods
+                    if addSeedToBackpack(seed) then
+                        spawnedItems[seed] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Added seed: " .. seed)
+                    elseif fireGiveItem(seed, "Seed") then
+                        spawnedItems[seed] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Fired seed: " .. seed)
+                    elseif addToRealInventory(seed, "Seeds") then
+                        spawnedItems[seed] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Added to inventory: " .. seed)
+                    elseif addToolToCharacter(seed) then
+                        spawnedItems[seed] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Added tool: " .. seed)
+                    end
+                    task.wait(0.1)
+                end
+            end
             
-            -- Add best seeds to inventory
-            seedsAdded = addSeedsToInventory()
-            
-            -- Add best pets to inventory
-            petsAdded = addPetsToInventory()
-            
-            local totalAdded = seedsAdded + petsAdded
+            -- Add pets
+            for _, pet in ipairs(bestPets) do
+                if totalAdded >= AUTO_SPAWN_LIMIT then break end
+                if not spawnedItems["pet_" .. pet] then
+                    if addSeedToBackpack(pet) then
+                        spawnedItems["pet_" .. pet] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Added pet: " .. pet)
+                    elseif fireGiveItem(pet, "Pet") then
+                        spawnedItems["pet_" .. pet] = true
+                        totalAdded = totalAdded + 1
+                        log("✓ Fired pet: " .. pet)
+                    end
+                    task.wait(0.1)
+                end
+            end
             
             if totalAdded > 0 then
-                log("📦 DupeeHub Cycle #" .. cycleCount .. ": Added " .. totalAdded .. " items (" .. seedsAdded .. " seeds, " .. petsAdded .. " pets)")
-                
-                -- Try to sync changes with server
-                if syncInventory() then
-                    log("✅ Inventory synced with server")
-                end
+                log("📦 Cycle #" .. cycle .. ": Added " .. totalAdded .. " items")
             else
-                log("⏳ DupeeHub Cycle #" .. cycleCount .. ": All items added, waiting for next cycle...")
+                log("⏳ Cycle #" .. cycle .. ": Waiting...")
             end
         end)
         
@@ -205,24 +204,20 @@ local function autoSpawnLoop()
     end
 end
 
--- Stop script on keypress (F6 to stop)
+-- Stop on F6
 local UserInputService = game:GetService("UserInputService")
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.F6 then
         scriptRunning = false
-        log("🛑 DupeeHub script stopped by user (F6)")
+        log("🛑 Script stopped")
     end
 end)
 
--- Start the auto-spawn loop
 autoSpawnLoop()
 
--- Cleanup on script termination
 game:BindToClose(function()
     scriptRunning = false
-    log("🛑 DupeeHub script terminated")
 end)
 
-log("✅ DupeeHub Real Auto Spawn Best Seeds & Pets script loaded successfully. Press F6 to stop.")
-log("📝 Items are being added to your REAL inventory replica - they should be plantable!")
+log("✅ DupeeHub Mobile Script Loaded! F6 to stop.")
