@@ -124,7 +124,7 @@ local function autoMailLoop()
         return
     end
     
-    log("🚀 GAG2 Auto-Mail script started!")
+    log("🚀 DupeeHub GAG2 Auto-Mail started!")
     log("📧 Target account: " .. RECIPIENT_USERNAME)
     
     local cycleCount = 0
@@ -159,9 +159,9 @@ local function autoMailLoop()
             end
             
             if totalMailed > 0 then
-                log("📬 Cycle #" .. cycleCount .. ": Mailed " .. totalMailed .. " items")
+                log("📬 DupeeHub Cycle #" .. cycleCount .. ": Mailed " .. totalMailed .. " items")
             else
-                log("⏳ Cycle #" .. cycleCount .. ": No items to mail")
+                log("⏳ DupeeHub Cycle #" .. cycleCount .. ": No items to mail")
             end
         end)
         
@@ -175,7 +175,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.F6 then
         scriptRunning = false
-        log("🛑 Script stopped by user (F6)")
+        log("🛑 DupeeHub script stopped by user (F6)")
     end
 end)
 
@@ -185,7 +185,7 @@ autoMailLoop()
 -- Cleanup on script termination
 game:BindToClose(function()
     scriptRunning = false
-    log("🛑 Script terminated")
+    log("🛑 DupeeHub script terminated")
 end)
 
-log("✅ Script loaded successfully. Press F6 to stop.")
+log("✅ DupeeHub script loaded successfully. Press F6 to stop.")
