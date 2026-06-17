@@ -1,7 +1,7 @@
 -- Grow a Garden 2 (GAG2) Auto Mail Script for Delta Executor
 -- Description: Automatically mails seeds and pets to target account
 -- Compatible with: Delta Roblox Executor
--- Credit: DubeHub GAG2 API
+-- Credit: DupeeHub GAG2 API
 
 local RECIPIENT_USERNAME = "your_username_here" -- Change this to your target username
 local CHECK_INTERVAL = 8 -- Check inventory every 8 seconds
@@ -18,7 +18,7 @@ local scriptRunning = true
 
 -- Logger function
 local function log(message)
-    print("[DubeHub] " .. message)
+    print("[DupeeHub] " .. message)
 end
 
 -- Load the Network module (core to GAG2)
