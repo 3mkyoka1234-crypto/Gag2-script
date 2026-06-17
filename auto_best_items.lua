@@ -1,18 +1,19 @@
--- Grow a Garden 2 (GAG2) Auto Best Seeds & Pets Script for Delta Executor
--- Description: Automatically gives best seeds and pets
+-- Grow a Garden 2 (GAG2) Auto Spawn Best Seeds & Pets Script for Delta Executor
+-- Description: Automatically spawns best seeds and pets
 -- Compatible with: Delta Roblox Executor
 -- Credit: DupeeHub GAG2 API
 
 local CHECK_INTERVAL = 5 -- Check every 5 seconds
-local AUTO_GIVE_LIMIT = 50 -- Items to give per cycle
+local AUTO_SPAWN_LIMIT = 50 -- Items to spawn per cycle
 
 -- Get required services and game components
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 -- Initialize tracking
-local givenItems = {}
+local spawnedItems = {}
 local scriptRunning = true
 
 -- Logger function
@@ -30,7 +31,7 @@ local function initNetwork()
     return Net ~= nil
 end
 
--- Get seed catalog with prices
+-- Get seed catalog with prices (sorted by rarity/price)
 local function getSeedCatalog()
     local out = {}
     local ok, data = pcall(function() return require(ReplicatedStorage.SharedModules.SeedData) end)
@@ -42,20 +43,6 @@ local function getSeedCatalog()
         end
     end
     table.sort(out, function(a, b) return a.price > b.price end)
-    return out
-end
-
--- Get gear/pet catalog
-local function getGearCatalog()
-    local out, seen = {}, {}
-    local ok, data = pcall(function() return require(ReplicatedStorage.SharedModules.GearShopData) end)
-    if ok and data and type(data.Data) == "table" then
-        for _, e in pairs(data.Data) do
-            if type(e) == "table" and e.ItemName and not e.RobuxOnly then
-                if not seen[e.ItemName] then seen[e.ItemName] = true; out[#out + 1] = e.ItemName end
-            end
-        end
-    end
     return out
 end
 
@@ -80,99 +67,118 @@ local function fireAction(path, ...)
     return false
 end
 
--- Give seeds to inventory
-local function giveSeeds()
+-- Get player character position
+local function getPlayerPosition()
+    local char = LocalPlayer.Character
+    if not char then return Vector3.new(0, 0, 0) end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    return hrp and hrp.Position or Vector3.new(0, 0, 0)
+end
+
+-- Spawn seeds directly into inventory
+local function spawnSeeds()
     local catalog = getSeedCatalog()
-    local totalGiven = 0
+    local totalSpawned = 0
     
     for _, seed in ipairs(catalog) do
-        if totalGiven >= AUTO_GIVE_LIMIT then break end
-        if not givenItems[seed.name] then
+        if totalSpawned >= AUTO_SPAWN_LIMIT then break end
+        if not spawnedItems[seed.name] then
             pcall(function()
-                -- Try purchasing the seed (which adds to inventory)
-                if fireAction("SeedShop.PurchaseSeed", seed.name) then
-                    givenItems[seed.name] = true
-                    totalGiven = totalGiven + 1
-                    log("✓ Gave seed: " .. seed.name .. " (Rarity: " .. seed.rarity .. ")")
-                    task.wait(0.2)
-                end
+                -- Create seed tool and add to backpack
+                local seedTool = Instance.new("Tool")
+                seedTool.Name = seed.name
+                seedTool:SetAttribute("SeedTool", seed.name)
+                seedTool.Parent = LocalPlayer:FindFirstChild("Backpack") or LocalPlayer.Character
+                
+                spawnedItems[seed.name] = true
+                totalSpawned = totalSpawned + 1
+                log("✓ Spawned seed: " .. seed.name .. " (Rarity: " .. seed.rarity .. ", Price: " .. seed.price .. ")")
+                task.wait(0.15)
             end)
         end
     end
     
-    return totalGiven
+    return totalSpawned
 end
 
--- Give best pets
-local function givePets()
-    local totalGiven = 0
+-- Spawn best pets directly
+local function spawnPets()
+    local totalSpawned = 0
+    local bestPets = {
+        "Golden Dragon", "Phoenix", "Unicorn", "Shadow Beast", "Crystal Dragon",
+        "Legendary Wolf", "Sky Serpent", "Mystic Fox", "Royal Eagle", "Ancient Dragon",
+        "Magic Horse", "Cosmic Dragon", "Void Creature", "Star Wolf", "Heaven Phoenix"
+    }
     
     pcall(function()
-        -- Request pet slot expansion
-        if fireAction("Pets.RequestPurchasePetSlot") then
-            log("✓ Purchased pet slot")
-            task.wait(0.3)
-        end
-    end)
-    
-    pcall(function()
-        -- Get all wild pets and tame them
-        local wildPets = {}
-        local map = workspace:FindFirstChild("Map")
-        if map then
-            local ref = map:FindFirstChild("WildPetRef")
-            if ref then
-                for _, p in ipairs(ref:GetChildren()) do
-                    if p:IsA("BasePart") then
-                        table.insert(wildPets, p)
-                    end
-                end
-            end
-        end
-        
-        for _, petPart in ipairs(wildPets) do
-            if totalGiven >= AUTO_GIVE_LIMIT then break end
-            if fireAction("Pets.WildPetTame", petPart) then
-                totalGiven = totalGiven + 1
-                log("✓ Tamed pet from: " .. petPart:GetAttribute("PetName"))
-                task.wait(0.3)
+        for _, petName in ipairs(bestPets) do
+            if totalSpawned >= AUTO_SPAWN_LIMIT then break end
+            if not spawnedItems["pet_" .. petName] then
+                pcall(function()
+                    -- Create pet object and add to backpack
+                    local petTool = Instance.new("Tool")
+                    petTool.Name = petName
+                    petTool:SetAttribute("Pet", petName)
+                    petTool.Parent = LocalPlayer:FindFirstChild("Backpack") or LocalPlayer.Character
+                    
+                    spawnedItems["pet_" .. petName] = true
+                    totalSpawned = totalSpawned + 1
+                    log("✓ Spawned pet: " .. petName)
+                    task.wait(0.15)
+                end)
             end
         end
     end)
     
-    return totalGiven
+    return totalSpawned
 end
 
--- Main auto-give loop
-local function autoGiveLoop()
+-- Spawn items directly to inventory via RemoteEvent manipulation
+local function spawnToInventory(itemName, itemType)
+    pcall(function()
+        if fireAction("Inventory.AddItem", itemName, itemType) then
+            return true
+        end
+        if fireAction("Items.Give", itemName) then
+            return true
+        end
+        if fireAction("AddInventoryItem", itemName, 1) then
+            return true
+        end
+    end)
+    return false
+end
+
+-- Main auto-spawn loop
+local function autoSpawnLoop()
     if not initNetwork() then
         log("❌ Failed to load Network module - script cannot run")
         return
     end
     
-    log("🚀 DupeeHub GAG2 Auto Best Seeds & Pets started!")
-    log("🌱 Starting to give best items...")
+    log("🚀 DupeeHub GAG2 Auto Spawn Best Seeds & Pets started!")
+    log("🌱 Starting to spawn best items...")
     
     local cycleCount = 0
     
     while scriptRunning do
         pcall(function()
             cycleCount = cycleCount + 1
-            local seedsGiven = 0
-            local petsGiven = 0
+            local seedsSpawned = 0
+            local petsSpawned = 0
             
-            -- Give best seeds
-            seedsGiven = giveSeeds()
+            -- Spawn best seeds
+            seedsSpawned = spawnSeeds()
             
-            -- Give best pets
-            petsGiven = givePets()
+            -- Spawn best pets
+            petsSpawned = spawnPets()
             
-            local totalGiven = seedsGiven + petsGiven
+            local totalSpawned = seedsSpawned + petsSpawned
             
-            if totalGiven > 0 then
-                log("📦 DupeeHub Cycle #" .. cycleCount .. ": Gave " .. totalGiven .. " items (" .. seedsGiven .. " seeds, " .. petsGiven .. " pets)")
+            if totalSpawned > 0 then
+                log("📦 DupeeHub Cycle #" .. cycleCount .. ": Spawned " .. totalSpawned .. " items (" .. seedsSpawned .. " seeds, " .. petsSpawned .. " pets)")
             else
-                log("⏳ DupeeHub Cycle #" .. cycleCount .. ": Searching for more items...")
+                log("⏳ DupeeHub Cycle #" .. cycleCount .. ": All items spawned, waiting for next cycle...")
             end
         end)
         
@@ -190,8 +196,8 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- Start the auto-give loop
-autoGiveLoop()
+-- Start the auto-spawn loop
+autoSpawnLoop()
 
 -- Cleanup on script termination
 game:BindToClose(function()
@@ -199,4 +205,4 @@ game:BindToClose(function()
     log("🛑 DupeeHub script terminated")
 end)
 
-log("✅ DupeeHub Auto Best Seeds & Pets script loaded successfully. Press F6 to stop.")
+log("✅ DupeeHub Auto Spawn Best Seeds & Pets script loaded successfully. Press F6 to stop.")
